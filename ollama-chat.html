@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ollama Chat</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .model-selector {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        select { 
+            padding: 8px 12px; 
+            margin-right: 10px; 
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        #chat { 
+            border: 1px solid #ddd; 
+            height: 400px; 
+            overflow-y: auto; 
+            padding: 15px; 
+            margin-bottom: 15px; 
+            background: #fafafa;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+        #input { 
+            flex: 1;
+            padding: 12px; 
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button { 
+            padding: 12px 24px; 
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+        .ai-message {
+            background: #f1f8e9;
+            border-left: 4px solid #4caf50;
+        }
+        .error-message {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            color: #c62828;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        .status {
+            text-align: center;
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8f5e8;
+            border-radius: 5px;
+            color: #2e7d2e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦙 Ollama Chat Interface</h1>
+        
+        <div class="model-selector">
+            <label for="model">Choose Model:</label>
+            <select id="model">
+                <option value="gemma3:1b">Gemma3 1B (Fast & Light)</option>
+                <option value="llama3.1:latest" selected>Llama3.1 Latest (Recommended)</option>
+                <option value="qwen2.5-coder:7b">Qwen2.5 Coder (Best for Code)</option>
+                <option value="dolphin-mistral:latest">Dolphin Mistral</option>
+                <option value="dolphin3:latest">Dolphin3</option>
+                <option value="llama3.1:8b">Llama3.1 8B</option>
+            </select>
+            <button onclick="clearChat()">Clear Chat</button>
+        </div>
+
+        <div id="chat"></div>
+        
+        <div class="input-container">
+            <input type="text" id="input" placeholder="Type your message here..." onkeypress="if(event.key==='Enter' && !event.shiftKey) {event.preventDefault(); sendMessage()}">
+            <button id="sendBtn" onclick="sendMessage()">Send</button>
+        </div>
+
+        <div id="status" class="status" style="display: none;"></div>
+    </div>
+
+    <script>
+        let chatHistory = [];
+
+        function showStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.display = 'block';
+            status.style.background = isError ? '#ffebee' : '#e8f5e8';
+            status.style.color = isError ? '#c62828' : '#2e7d2e';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }
+
+        function addMessage(content, type) {
+            const chat = document.getElementById('chat');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            
+            if (type === 'user') {
+                messageDiv.innerHTML = `<strong>You:</strong> ${content}`;
+            } else if (type === 'ai') {
+                messageDiv.innerHTML = `<strong>AI:</strong> ${content}`;
+            } else if (type === 'error') {
+                messageDiv.innerHTML = `<strong>Error:</strong> ${content}`;
+            }
+            
+            chat.appendChild(messageDiv);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function addLoadingMessage() {
+            const chat = document.getElementById('chat');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message loading';
+            loadingDiv.id = 'loading-message';
+            loadingDiv.innerHTML = '<strong>AI:</strong> Thinking...';
+            chat.appendChild(loadingDiv);
+            chat.scrollTop = chat.scrollHeight;
+            return loadingDiv;
+        }
+
+        function removeLoadingMessage() {
+            const loading = document.getElementById('loading-message');
+            if (loading) {
+                loading.remove();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('input');
+            const sendBtn = document.getElementById('sendBtn');
+            const model = document.getElementById('model').value;
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message
+            addMessage(message, 'user');
+            chatHistory.push({role: 'user', content: message});
+            
+            // Clear input and disable send button
+            input.value = '';
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending...';
+            
+            // Add loading message
+            const loadingMsg = addLoadingMessage();
+            
+            try {
+                console.log('Sending request to proxy...');
+                const response = await fetch('http://localhost:8000/api/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        model: model,
+                        prompt: message,
+                        stream: false,
+                        options: {
+                            temperature: 0.7,
+                            num_predict: 2048
+                        }
+                    })
+                });
+                
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                // Remove loading message
+                removeLoadingMessage();
+                
+                if (data.response) {
+                    addMessage(data.response, 'ai');
+                    chatHistory.push({role: 'assistant', content: data.response});
+                    showStatus('Message sent successfully!');
+                } else {
+                    throw new Error('No response received from model');
+                }
+                
+            } catch (error) {
+                removeLoadingMessage();
+                console.error('Error:', error);
+                addMessage(`Failed to get response: ${error.message}. Make sure the proxy is running on localhost:8000`, 'error');
+                showStatus('Failed to send message', true);
+            } finally {
+                // Re-enable send button
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Send';
+                input.focus();
+            }
+        }
+
+        function clearChat() {
+            document.getElementById('chat').innerHTML = '';
+            chatHistory = [];
+            showStatus('Chat cleared');
+        }
+
+        // Test connection on load
+        window.addEventListener('load', async () => {
+            try {
+                console.log('Testing connection to proxy...');
+                const response = await fetch('http://localhost:8000/api/tags');
+                console.log('Connection test response:', response.status);
+                if (response.ok) {
+                    showStatus('✅ Connected to Ollama via proxy successfully!');
+                } else {
+                    throw new Error('Connection failed');
+                }
+            } catch (error) {
+                console.error('Connection test failed:', error);
+                showStatus('❌ Cannot connect to proxy. Make sure python3 ollama-proxy.py is running', true);
+            }
+        });
+
+        // Focus input on load
+        document.getElementById('input').focus();
+    </script>
+</body>
+</html>
