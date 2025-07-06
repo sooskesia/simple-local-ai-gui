@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ollama Chat</title>
+    <title>Ollama Chat with RAG & Vision</title>
     <style>
         body { 
             font-family: Arial, sans-serif; 
-            max-width: 900px; 
+            max-width: 1000px; 
             margin: 0 auto; 
             padding: 20px; 
             background-color: #f5f5f5;
@@ -21,16 +21,98 @@
             text-align: center;
             margin-bottom: 20px;
         }
-        .model-selector {
+        .controls {
+            display: flex;
+            gap: 15px;
             margin-bottom: 20px;
-            text-align: center;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .model-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         select { 
             padding: 8px 12px; 
-            margin-right: 10px; 
             border: 1px solid #ddd;
             border-radius: 5px;
             font-size: 14px;
+        }
+        .file-upload {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-input {
+            display: none;
+        }
+        .file-button {
+            padding: 8px 16px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .file-button:hover {
+            background: #218838;
+        }
+        .uploaded-files {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px;
+            margin-bottom: 5px;
+            background: white;
+            border-radius: 3px;
+            border: 1px solid #dee2e6;
+        }
+        .file-item:last-child {
+            margin-bottom: 0;
+        }
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-type {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .file-type.pdf { background: #dc3545; color: white; }
+        .file-type.image { background: #fd7e14; color: white; }
+        .file-type.text { background: #6c757d; color: white; }
+        .remove-file {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 2px 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .remove-file:hover {
+            background: #c82333;
+        }
+        .image-preview {
+            max-width: 200px;
+            max-height: 150px;
+            border-radius: 5px;
+            margin-top: 5px;
         }
         #chat { 
             border: 1px solid #ddd; 
@@ -101,23 +183,68 @@
             border-radius: 5px;
             color: #2e7d2e;
         }
+        .rag-mode {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .rag-mode.active {
+            background: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🦙 Ollama Chat Interface</h1>
+        <h1>🦙 Ollama Chat with RAG & Vision</h1>
         
-        <div class="model-selector">
-            <label for="model">Choose Model:</label>
-            <select id="model">
-                <option value="gemma3:1b">Gemma3 1B (Fast & Light)</option>
-                <option value="llama3.1:latest" selected>Llama3.1 Latest (Recommended)</option>
-                <option value="qwen2.5-coder:7b">Qwen2.5 Coder (Best for Code)</option>
-                <option value="dolphin-mistral:latest">Dolphin Mistral</option>
-                <option value="dolphin3:latest">Dolphin3</option>
-                <option value="llama3.1:8b">Llama3.1 8B</option>
-            </select>
+        <div class="controls">
+            <div class="model-selector">
+                <label for="model">Model:</label>
+                <select id="model">
+                    <option value="llava:latest">LLaVA (Vision + Text)</option>
+
+                    <option value="qwen2.5-coder:7b">Qwen2.5 Coder</option>
+                    <option value="dolphin-mistral:latest">Dolphin Mistral</option>
+
+                </select>
+            </div>
+            
+            <div class="file-upload">
+                <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.txt,.doc,.docx,.png,.jpg,.jpeg,.gif,.bmp,.webp">
+                <label for="fileInput" class="file-button">
+                    📁 Upload Files
+                </label>
+                <input type="file" id="imageInput" class="file-input" accept="image/*">
+                <label for="imageInput" class="file-button">
+                    🖼️ Upload Image
+                </label>
+            </div>
+            
             <button onclick="clearChat()">Clear Chat</button>
+        </div>
+
+        <div id="ragMode" class="rag-mode" style="display: none;">
+            <div class="checkbox-container">
+                <input type="checkbox" id="ragEnabled" checked>
+                <label for="ragEnabled">RAG Mode Active</label>
+            </div>
+            <span id="ragInfo">Documents loaded and ready for questions</span>
+        </div>
+
+        <div id="uploadedFiles" class="uploaded-files" style="display: none;">
+            <h4>Uploaded Files:</h4>
+            <div id="filesList"></div>
         </div>
 
         <div id="chat"></div>
@@ -132,6 +259,8 @@
 
     <script>
         let chatHistory = [];
+        let uploadedFiles = [];
+        let vectorStore = null;
 
         function showStatus(message, isError = false) {
             const status = document.getElementById('status');
@@ -179,10 +308,172 @@
             }
         }
 
+        function updateFilesList() {
+            const filesList = document.getElementById('filesList');
+            const uploadedFilesDiv = document.getElementById('uploadedFiles');
+            const ragMode = document.getElementById('ragMode');
+            
+            if (uploadedFiles.length === 0) {
+                uploadedFilesDiv.style.display = 'none';
+                ragMode.style.display = 'none';
+                return;
+            }
+            
+            uploadedFilesDiv.style.display = 'block';
+            ragMode.style.display = 'block';
+            ragMode.classList.add('active');
+            
+            filesList.innerHTML = '';
+            uploadedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                
+                const fileInfo = document.createElement('div');
+                fileInfo.className = 'file-info';
+                
+                const fileType = document.createElement('span');
+                fileType.className = `file-type ${file.type}`;
+                fileType.textContent = file.type.toUpperCase();
+                
+                const fileName = document.createElement('span');
+                fileName.textContent = file.name;
+                
+                fileInfo.appendChild(fileType);
+                fileInfo.appendChild(fileName);
+                
+                // Add image preview for images
+                if (file.type === 'image' && file.preview) {
+                    const img = document.createElement('img');
+                    img.src = file.preview;
+                    img.className = 'image-preview';
+                    fileInfo.appendChild(img);
+                }
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-file';
+                removeBtn.textContent = '×';
+                removeBtn.onclick = () => removeFile(index);
+                
+                fileItem.appendChild(fileInfo);
+                fileItem.appendChild(removeBtn);
+                filesList.appendChild(fileItem);
+            });
+        }
+
+        function removeFile(index) {
+            uploadedFiles.splice(index, 1);
+            updateFilesList();
+            showStatus('File removed');
+        }
+
+        function getFileType(file) {
+            if (file.type.startsWith('image/')) return 'image';
+            if (file.type === 'application/pdf') return 'pdf';
+            if (file.type.startsWith('text/')) return 'text';
+            return 'document';
+        }
+
+        async function processFile(file) {
+            const fileType = getFileType(file);
+            let content = '';
+            let preview = null;
+            
+            if (fileType === 'image') {
+                // For images, we'll send the base64 data
+                const reader = new FileReader();
+                return new Promise((resolve) => {
+                    reader.onload = (e) => {
+                        preview = e.target.result;
+                        resolve({
+                            name: file.name,
+                            type: fileType,
+                            content: e.target.result,
+                            preview: preview
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                });
+            } else if (fileType === 'text') {
+                // For text files, read as text
+                const reader = new FileReader();
+                return new Promise((resolve) => {
+                    reader.onload = (e) => {
+                        resolve({
+                            name: file.name,
+                            type: fileType,
+                            content: e.target.result
+                        });
+                    };
+                    reader.readAsText(file);
+                });
+            } else if (fileType === 'pdf') {
+                // For PDFs, we'll need to send to backend for processing
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                try {
+                    const response = await fetch('http://localhost:8000/api/process-pdf', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('PDF processing failed');
+                    }
+                    
+                    const data = await response.json();
+                    return {
+                        name: file.name,
+                        type: fileType,
+                        content: data.text
+                    };
+                } catch (error) {
+                    showStatus(`Error processing PDF: ${error.message}`, true);
+                    return null;
+                }
+            }
+            
+            return null;
+        }
+
+        // File upload handlers
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            showStatus('Processing files...');
+            
+            for (const file of files) {
+                const processedFile = await processFile(file);
+                if (processedFile) {
+                    uploadedFiles.push(processedFile);
+                }
+            }
+            
+            updateFilesList();
+            showStatus(`${files.length} file(s) uploaded successfully!`);
+            e.target.value = ''; // Clear input
+        });
+
+        document.getElementById('imageInput').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            showStatus('Processing images...');
+            
+            for (const file of files) {
+                const processedFile = await processFile(file);
+                if (processedFile) {
+                    uploadedFiles.push(processedFile);
+                }
+            }
+            
+            updateFilesList();
+            showStatus(`${files.length} image(s) uploaded successfully!`);
+            e.target.value = ''; // Clear input
+        });
+
         async function sendMessage() {
             const input = document.getElementById('input');
             const sendBtn = document.getElementById('sendBtn');
             const model = document.getElementById('model').value;
+            const ragEnabled = document.getElementById('ragEnabled').checked;
             const message = input.value.trim();
             
             if (!message) return;
@@ -200,29 +491,33 @@
             const loadingMsg = addLoadingMessage();
             
             try {
-                console.log('Sending request to proxy...');
+                const requestData = {
+                    model: model,
+                    prompt: message,
+                    stream: false,
+                    options: {
+                        temperature: 0.7,
+                        num_predict: 2048
+                    }
+                };
+
+                // Add uploaded files if any
+                if (uploadedFiles.length > 0 && ragEnabled) {
+                    requestData.files = uploadedFiles;
+                    requestData.rag_enabled = true;
+                }
+
                 const response = await fetch('http://localhost:8000/api/generate', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        model: model,
-                        prompt: message,
-                        stream: false,
-                        options: {
-                            temperature: 0.7,
-                            num_predict: 2048
-                        }
-                    })
+                    body: JSON.stringify(requestData)
                 });
-                
-                console.log('Response status:', response.status);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const data = await response.json();
-                console.log('Response data:', data);
                 
                 // Remove loading message
                 removeLoadingMessage();
@@ -251,22 +546,21 @@
         function clearChat() {
             document.getElementById('chat').innerHTML = '';
             chatHistory = [];
+            uploadedFiles = [];
+            updateFilesList();
             showStatus('Chat cleared');
         }
 
         // Test connection on load
         window.addEventListener('load', async () => {
             try {
-                console.log('Testing connection to proxy...');
                 const response = await fetch('http://localhost:8000/api/tags');
-                console.log('Connection test response:', response.status);
                 if (response.ok) {
                     showStatus('✅ Connected to Ollama via proxy successfully!');
                 } else {
                     throw new Error('Connection failed');
                 }
             } catch (error) {
-                console.error('Connection test failed:', error);
                 showStatus('❌ Cannot connect to proxy. Make sure python3 ollama-proxy.py is running', true);
             }
         });
